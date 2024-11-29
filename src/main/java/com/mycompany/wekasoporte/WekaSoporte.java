@@ -2,112 +2,142 @@ package com.mycompany.wekasoporte;
 
 import javax.swing.*;
 import java.awt.*;
+import weka.core.DenseInstance;
+import weka.core.Instances;
+import weka.core.converters.ConverterUtils.DataSource;
+import weka.classifiers.bayes.BayesNet;
+import weka.core.SerializationHelper;
 
 public class WekaSoporte extends JFrame {
     private JPanel mainPanel;
     private JComboBox<String>[] inputFields;
+    private JTextField[] numericFields;
     private JLabel[] inputLabels;
     private JButton predictButton;
     private JButton clearButton;
     private JLabel resultLabel;
+    private BayesNet classifier;
+    private Instances datasetHeader;
 
     private final String[][] OPTIONS = {
         // checking_status
         {"", "<0", "0<=X<200", ">=200", "no checking"},
-        // foreign_worker
-        {"", "no", "yes"},
-        // duration - este será un JTextField
+        // duration - TextField
         null,
-        // existing_credits - este será un JTextField
-        null,
-        // property_magnitude
-        {"", "no known property", "car", "life insurance", "real estate"},
-        // own_telephone
-        {"", "none", "yes"},
-        // job
-        {"", "unemployed/unskilled non res", "unskilled resident", "skilled", "high qualif/self emp/mgmt"},
+        // credit_history
+        {"", "no credits/all paid", "all paid", "existing paid", "delayed previously", "critical/other existing credit"},
         // purpose
         {"", "new car", "used car", "furniture/equipment", "radio/tv", "domestic appliance", 
          "repairs", "education", "vacation", "retraining", "business", "other"},
-        // other_parties
-        {"", "none", "co applicant", "guarantor"},
+        // credit_amount - TextField
+        null,
         // savings_status
         {"", "<100", "100<=X<500", "500<=X<1000", ">=1000", "no known savings"},
-        // credit_history
-        {"", "no credits/all paid", "all paid", "existing paid", "delayed previously", "critical/other existing credit"},
-        // credit_amount - este será un JTextField
+        // employment
+        {"", "unemployed", "< 1 year", "1<=X<4", "4<=X<7", ">= 7 years"},
+        // installment_commitment - TextField
         null,
         // personal_status
         {"", "male div/sep", "female div/dep/mar", "male single", "male mar/wid", "female single"},
-        // residence_since - este será un JTextField
+        // other_parties
+        {"", "none", "co applicant", "guarantor"},
+        // residence_since - TextField
         null,
+        // property_magnitude
+        {"", "no known property", "car", "life insurance", "real estate"},
+        // age - TextField
+        null,
+        // other_payment_plans
+        {"", "bank", "stores", "none"},
         // housing
         {"", "rent", "own", "for free"},
-        // age - este será un JTextField
-        null
+        // existing_credits - TextField
+        null,
+        // job
+        {"", "unemployed/unskilled non res", "unskilled resident", "skilled", "high qualif/self emp/mgmt"},
+        // num_dependents - TextField
+        null,
+        // own_telephone
+        {"", "none", "yes"},
+        // foreign_worker
+        {"", "yes", "no"}
     };
 
     private final String[] ATRIBUTOS = {
         "Estado de cuenta",
-        "Trabajador extranjero",
         "Duración en meses",
-        "Créditos existentes",
-        "Tipo de propiedad",
-        "Teléfono",
-        "Trabajo",
-        "Propósito",
-        "Otros deudores",
-        "Estado de ahorros",
         "Historial crediticio",
+        "Propósito",
         "Monto del crédito",
+        "Estado de ahorros",
+        "Empleo",
+        "Compromiso de cuotas",
         "Estado civil",
+        "Otros deudores",
         "Tiempo en residencia",
+        "Tipo de propiedad",
+        "Edad",
+        "Otros planes de pago",
         "Vivienda",
-        "Edad"
+        "Créditos existentes",
+        "Trabajo",
+        "Número de dependientes",
+        "Teléfono propio",
+        "Trabajador extranjero"
     };
 
     @SuppressWarnings("unchecked")
     public WekaSoporte() {
-        setTitle("Evaluación de Crédito");
+        setTitle("Evaluación de Crédito - BayesNet");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(800, 700);
 
+        initializeComponents();
+        try {
+            cargarModelo();
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, 
+                "Error al cargar el modelo BayesNet: " + e.getMessage(),
+                "Error",
+                JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void initializeComponents() {
         JPanel contentPanel = new JPanel(new BorderLayout(10, 10));
         contentPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
-        // Panel de título
+
         JPanel titlePanel = new JPanel();
         JLabel titleLabel = new JLabel("Sistema de Evaluación de Crédito");
         titleLabel.setFont(new Font("Arial", Font.BOLD, 24));
         titlePanel.add(titleLabel);
         contentPanel.add(titlePanel, BorderLayout.NORTH);
 
-        // Panel de campos
+
         mainPanel = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(5, 5, 5, 5);
 
         inputFields = new JComboBox[ATRIBUTOS.length];
+        numericFields = new JTextField[7]; // Para campos numéricos
         inputLabels = new JLabel[ATRIBUTOS.length];
+        int numericFieldIndex = 0;
 
         for (int i = 0; i < ATRIBUTOS.length; i++) {
-            // Etiqueta
             gbc.gridx = 0;
             gbc.gridy = i;
             gbc.weightx = 0.4;
             inputLabels[i] = new JLabel(ATRIBUTOS[i] + ":");
             mainPanel.add(inputLabels[i], gbc);
 
-            // Campo de entrada
             gbc.gridx = 1;
             gbc.weightx = 0.6;
             
             if (OPTIONS[i] != null) {
-                // Crear ComboBox para opciones predefinidas
                 inputFields[i] = new JComboBox<>(OPTIONS[i]);
                 inputFields[i].setPreferredSize(new Dimension(200, 25));
-                // Renderizador personalizado para el item vacío
                 inputFields[i].setRenderer(new DefaultListCellRenderer() {
                     @Override
                     public Component getListCellRendererComponent(JList<?> list, Object value, 
@@ -121,9 +151,9 @@ public class WekaSoporte extends JFrame {
                 });
                 mainPanel.add(inputFields[i], gbc);
             } else {
-                // Crear TextField para entrada numérica
                 JTextField textField = new JTextField(15);
                 textField.setPreferredSize(new Dimension(200, 25));
+                numericFields[numericFieldIndex++] = textField;
                 mainPanel.add(textField, gbc);
             }
         }
@@ -135,7 +165,7 @@ public class WekaSoporte extends JFrame {
         ));
         contentPanel.add(scrollPane, BorderLayout.CENTER);
 
-        // Panel de botones y resultado
+        // Panel inferior con botones
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 10));
 
         predictButton = new JButton("Evaluar");
@@ -160,45 +190,97 @@ public class WekaSoporte extends JFrame {
         add(contentPanel);
     }
 
-    private void limpiarCampos() {
-        for (Component comp : mainPanel.getComponents()) {
-            if (comp instanceof JComboBox) {
-                ((JComboBox<?>) comp).setSelectedIndex(0);
-            } else if (comp instanceof JTextField) {
-                ((JTextField) comp).setText("");
-            }
+    private void cargarModelo() throws Exception {
+        String modelPath = "model.model";
+        String arffPath = "credit.g.arff";
+        
+        classifier = (BayesNet) SerializationHelper.read(modelPath);
+        DataSource source = new DataSource(arffPath);
+        datasetHeader = source.getDataSet();
+        if (datasetHeader.classIndex() == -1) {
+            datasetHeader.setClassIndex(datasetHeader.numAttributes() - 1);
         }
-        resultLabel.setText("Resultado: Pendiente de evaluación");
     }
 
     private void evaluar() {
-        // Aquí irá la lógica de evaluación cuando implementemos el árbol de decisión
         try {
-            // Recoger valores
-            String checking = (String) inputFields[0].getSelectedItem();
-            String foreignWorker = (String) inputFields[1].getSelectedItem();
-            
-            if (checking.isEmpty() || foreignWorker.isEmpty()) {
-                JOptionPane.showMessageDialog(this,
-                    "Por favor, seleccione al menos Estado de cuenta y Trabajador extranjero",
-                    "Campos requeridos",
-                    JOptionPane.WARNING_MESSAGE);
-                return;
+            double[] valores = new double[datasetHeader.numAttributes()];
+
+    
+            for (int i = 0; i < inputFields.length; i++) {
+                if (inputFields[i] != null) {
+                    String selectedValue = (String) inputFields[i].getSelectedItem();
+                    if (selectedValue.isEmpty()) {
+                        throw new Exception("Por favor complete todos los campos");
+                    }
+                    valores[i] = inputFields[i].getSelectedIndex() - 1;
+                }
             }
-            
-            // Aquí continuará la implementación de la lógica del árbol de decisión
-            resultLabel.setText("Resultado: Procesando evaluación...");
-            
+
+            // Procesar campos numéricos
+            int numericFieldIndex = 0;
+            for (int i = 0; i < OPTIONS.length; i++) {
+                if (OPTIONS[i] == null) {
+                    String value = numericFields[numericFieldIndex].getText();
+                    if (value.isEmpty()) {
+                        throw new Exception("Por favor complete todos los campos numéricos");
+                    }
+                    valores[i] = Double.parseDouble(value);
+                    numericFieldIndex++;
+                }
+            }
+
+            DenseInstance instancia = new DenseInstance(1.0, valores);
+            instancia.setDataset(datasetHeader);
+
+            double[] probabilidades = classifier.distributionForInstance(instancia);
+            double probabilidadBuenCredito = probabilidades[0] * 100;
+            String porcentaje = String.format("%.2f", probabilidadBuenCredito);
+
+            if (probabilidadBuenCredito > 50.0) {
+                resultLabel.setText("<html><div style='color:green; padding:10px;'>" +
+                                  "✓ APROBADO<br>" +
+                                  "Probabilidad: " + porcentaje + "%</div></html>");
+            } else {
+                resultLabel.setText("<html><div style='color:red; padding:10px;'>" +
+                                  "✗ RECHAZADO<br>" +
+                                  "Probabilidad: " + porcentaje + "%</div></html>");
+            }
+
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this,
+                "Por favor, ingrese valores numéricos válidos",
+                "Error de entrada",
+                JOptionPane.ERROR_MESSAGE);
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this,
-                "Error al procesar la evaluación: " + e.getMessage(),
+                "Error en la evaluación: " + e.getMessage(),
                 "Error",
                 JOptionPane.ERROR_MESSAGE);
         }
     }
 
+    private void limpiarCampos() {
+        for (JComboBox<String> comboBox : inputFields) {
+            if (comboBox != null) {
+                comboBox.setSelectedIndex(0);
+            }
+        }
+        for (JTextField textField : numericFields) {
+            if (textField != null) {
+                textField.setText("");
+            }
+        }
+        resultLabel.setText("Resultado: Pendiente de evaluación");
+    }
+
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
+            try {
+                UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
             WekaSoporte frame = new WekaSoporte();
             frame.setLocationRelativeTo(null);
             frame.setVisible(true);
